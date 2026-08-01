@@ -49,20 +49,44 @@ func downloadAndInstallSDL2() {
         return
     }
     
-    // Copy SDL2.framework to /Library/Frameworks
-    print("Copying SDL2.framework to /Library/Frameworks...")
+    // Copy SDL2.framework to /Library/Frameworks (requires admin privileges)
+    print("Copying SDL2.framework to /Library/Frameworks (will request administrator privileges if needed)...")
     let sourceFramework = (mountPoint as NSString).appendingPathComponent("SDL2.framework")
-    
-    let copyTask = Process()
-    copyTask.executableURL = URL(fileURLWithPath: "/bin/cp")
-    copyTask.arguments = ["-r", sourceFramework, "/Library/Frameworks/"]
-    
+
+    // Ensure source exists
+    guard fileManager.fileExists(atPath: sourceFramework) else {
+        print("Source framework not found at mount point: \(sourceFramework)")
+        return
+    }
+
+    // Use AppleScript via osascript to run the copy command with administrator privileges
+    // This will prompt the user for their password in a GUI prompt.
+    let escapedSource = sourceFramework.replacingOccurrences(of: "\"", with: "\\\"")
+    let appleScriptCmd = "do shell script \"/bin/cp -R \"\"\(escapedSource)\"\" /Library/Frameworks/\" with administrator privileges"
+
+    let osaTask = Process()
+    osaTask.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+    osaTask.arguments = ["-e", appleScriptCmd]
+
+    let stderrPipe = Pipe()
+    osaTask.standardError = stderrPipe
+
     do {
-        try copyTask.run()
-        copyTask.waitUntilExit()
-        print("SDL2.framework copied successfully!")
+        try osaTask.run()
+        osaTask.waitUntilExit()
+        if osaTask.terminationStatus == 0 {
+            print("SDL2.framework copied successfully (with admin privileges)!")
+        } else {
+            let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            if let errStr = String(data: errData, encoding: .utf8), !errStr.isEmpty {
+                print("Copy failed: \(errStr.trimmingCharacters(in: .whitespacesAndNewlines))")
+            } else {
+                print("Copy failed with exit code \(osaTask.terminationStatus)")
+            }
+            return
+        }
     } catch {
-        print("Copy error: \(error)")
+        print("Copy (elevated) error: \(error)")
         return
     }
     
