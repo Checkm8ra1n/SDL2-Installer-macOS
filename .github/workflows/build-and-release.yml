@@ -1,0 +1,71 @@
+name: Build and Release (SDL2 tag)
+
+on:
+  push:
+    tags:
+      - 'sdl2'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build macOS binary and publish Release
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install required tools
+        run: |
+          sudo xcode-select -switch /Applications/Xcode.app || true
+
+      - name: Build with xcodebuild (Release)
+        run: |
+          set -e
+          PROJECT="SDL2 Installer.xcodeproj"
+          SCHEME="SDL2 Installer"
+          DERIVED_DATA="build"
+          # Build without code signing for CI
+          xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -derivedDataPath "$DERIVED_DATA" CODE_SIGNING_ALLOWED=NO
+
+      - name: Prepare release artifact
+        run: |
+          set -e
+          mkdir -p release
+          PROD_DIR="build/Build/Products/Release"
+          APP_BIN="SDL2 Installer"
+          if [ ! -e "$PROD_DIR/$APP_BIN" ]; then
+            echo "Built product not found at $PROD_DIR/$APP_BIN"
+            ls -R "$PROD_DIR" || true
+            exit 1
+          fi
+          cp -R "$PROD_DIR/$APP_BIN" release/
+          cd release
+          zip -r ../sdl2-macos.zip "${APP_BIN}"
+          cd ..
+
+      - name: Create GitHub Release (tag: sdl2)
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: sdl2
+          release_name: SDL2 (built from CI)
+          body: |-
+            Automated build of the SDL2 Installer project (macOS) produced by GitHub Actions.
+          draft: false
+          prerelease: false
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./sdl2-macos.zip
+          asset_name: sdl2-macos.zip
+          asset_content_type: application/zip
