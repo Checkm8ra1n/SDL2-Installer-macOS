@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install required tools
         run: |
@@ -36,7 +38,7 @@ jobs:
           set -e
           mkdir -p release
           PROD_DIR="build/Build/Products/Release"
-          APP_BIN="SDL2 Installer"
+          APP_BIN="SDL2 Installer.app"
           if [ ! -e "$PROD_DIR/$APP_BIN" ]; then
             echo "Built product not found at $PROD_DIR/$APP_BIN"
             ls -R "$PROD_DIR" || true
